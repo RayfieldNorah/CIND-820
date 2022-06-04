@@ -1,0 +1,77 @@
+---
+title: 'Descriptive Statistics for Student Performance Dataset'
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+<center>  <h3> Norah Rayfield </h2> </center>
+<center> <h3> Student ID:501076192 </h2> </center>
+---
+
+#### 1. 
+```{r}
+# check data types of the attributes and install all needed packages and libraries
+#install.packages("ggplot2")
+#install.packages("ggcorrplot")
+#install.packages("dplyr")
+#install.packages("rlang")
+#install.packages("magrittr")
+#install.packages("caret")
+#install.packages("psych")
+library(caret)
+library(ggcorrplot)
+library(ggplot2)
+library(corrplot)
+library(rlang)
+library(dplyr)
+library(psych)
+library(magrittr)
+
+
+mathdata=read.table("student-mat.csv",sep=";",header=TRUE)
+langdata=read.table("student-por.csv",sep=";",header=TRUE)
+
+str(mathdata)
+str(langdata)
+
+
+```
+
+#### 2.
+```{r}
+# There are no missing values.
+
+colSums(is.na(mathdata))
+colSums(is.na(langdata))
+
+
+
+```
+```{r}
+#descriptive stats for the data
+summary(mathdata)
+summary(langdata)
+describe(mathdata)
+describe(langdata)
+
+write.csv(summary(mathdata),"mathsummary.csv")
+write.csv(summary(langdata),"langsummary.csv")
+```
+
+```{r}
+# calculating frequency of multiple variables
+mod_frame <- apply(mathdata, 2 , table)
+
+print ("Math Frequencies")
+print (mod_frame)
+
+modl_frame <- apply(langdata, 2 , table)
+
+print ("Language Frequencies")
+print (modl_frame)
+```
+```{r}
+
+
