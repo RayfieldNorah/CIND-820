@@ -1,0 +1,476 @@
+---
+title: "Predicting Student Success Usuing Machine Learning"
+output: html_document
+date: '2022-06-26 by Norah Rayfield'
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+
+```{r}
+#Initial Analysis
+
+#All code can be found in Github at https://github.com/RayfieldNorah/CIND-820.git.
+
+# Get the data, check data types of the attributes and install all needed packages and libraries
+#install.packages("ggplot2")
+#install.packages("ggcorrplot")
+#install.packages("dplyr")
+#install.packages("rlang")
+#install.packages("magrittr")
+#install.packages("caret")
+#install.packages("psych")
+
+library(InformationValue)
+library(ISLR)
+library(caret)
+library(ggcorrplot)
+library(ggplot2)
+library(corrplot)
+library(rlang)
+library(dplyr)
+library(psych)
+library(magrittr)
+library(tidyr)
+library(factoextra)
+library(devtools)
+library(mlbench)
+library(car)
+library(class)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(rattle)
+library(performance)
+
+mathdata=read.table("student-mat.csv",sep=";",header=TRUE,
+                    stringsAsFactors = TRUE)
+langdata=read.table("student-por.csv",sep=";",header=TRUE, stringsAsFactors = TRUE)
+
+str(mathdata)
+str(langdata)
+
+```
+
+
+
+```{r}
+# Check for any missing values.
+
+colSums(is.na(mathdata))
+colSums(is.na(langdata))
+
+# There are no missing values.
+```
+
+```{r}
+#Look at descriptive stats for the data
+summary(mathdata)
+summary(langdata)
+describe(mathdata)
+describe(langdata)
+
+write.csv(summary(mathdata),"mathsummary.csv")
+write.csv(summary(langdata),"langsummary.csv")
+
+```
+```{r}
+# Calculating frequency of multiple variables
+mod_frame <- apply(mathdata, 2 , table)
+
+print ("Math Frequencies")
+print (mod_frame)
+
+modl_frame <- apply(langdata, 2 , table)
+
+print ("Language Frequencies")
+print (modl_frame)
+```
+```{r}
+#Exploratory Analysis and Visualizations
+
+#Add type column and append both files
+langdata$typeC <- 'lang'
+mathdata$typeC <- 'math'
+appendedDf <- rbind(mathdata, langdata)
+
+#Take a closer look at the continuous variables
+continuousgr <- (appendedDf[,c(31,32,33,34)])
+
+ggplot(continuousgr, aes(x=typeC, y=G1)) + 
+  geom_boxplot(outlier.colour="red", outlier.shape=8,
+                outlier.size=4) + geom_jitter(shape=16, position=position_jitter(0.2))
+
+ggplot(continuousgr, aes(x=typeC, y=G2)) + 
+  geom_boxplot(outlier.colour="red", outlier.shape=8,
+                outlier.size=4) + geom_jitter(shape=16, position=position_jitter(0.2))
+
+ggplot(continuousgr, aes(x=typeC, y=G3)) + 
+  geom_boxplot(outlier.colour="red", outlier.shape=8,
+                outlier.size=4) + geom_jitter(shape=16, position=position_jitter(0.2))
+
+```
+```{r}
+continuousa <- (appendedDf[,c(3,30,34)])
+ggplot(continuousa, aes(x=typeC, y=age)) + 
+  geom_boxplot(outlier.colour="red", outlier.shape=8,
+                outlier.size=4) + geom_jitter(shape=16, position=position_jitter(0.2))
+
+ggplot(continuousa, aes(x=typeC, y=absences)) + 
+  geom_boxplot(outlier.colour="red", outlier.shape=8,
+                outlier.size=4) + geom_jitter(shape=16, position=position_jitter(0.2))
+
+#some outliers were identified
+
+```
+```{r}
+
+#Look at the discrete variables
+
+appendedDf %>% 
+  select_if(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(x = value)) +
+    geom_density() +
+    facet_wrap(~key, scales = 'free')
+
+appendedDf %>% 
+  select_if(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(x = value)) +
+    geom_histogram() +
+    facet_wrap(~key, scales = 'free')
+
+appendedDf %>% 
+  select_if(is.factor) %>% 
+  gather() %>% 
+  ggplot(aes(x = value)) +
+    geom_bar() +
+    facet_wrap(~key, scales = 'free')
+
+```
+```{r}
+#Look at correlations between variables
+corrdf <- (appendedDf[,c(3,30,31,32,33)])
+myplot = cor(corrdf)
+corrplot(myplot, method = 'color')
+
+corrdf2 <- (appendedDf[,c(7, 8, 13, 14,24, 25, 26, 27, 28,29, 3,30,31,32,33)])
+myplot = cor(corrdf2)
+corrplot(myplot, method = 'number', number.cex = 0.5)
+
+corrplot(myplot, order = 'AOE', addCoef.col = 'black', tl.pos = 'd', cl.pos = 'n', number.cex = 0.5)
+
+#The grade variables, G1, G2 and G3 are highly positively correlated
+#absences and age show some correlation
+#Mother's and Father's education show a positive correlation to each other as well
+
+```
+
+```{r}
+
+
+#change binary values to numeric
+appendedDf$schoolsup<-ifelse(appendedDf$schoolsup=="yes",1,0)
+appendedDf$sex<-ifelse(appendedDf$sex=="F",1,0)
+appendedDf$address<-ifelse(appendedDf$address=="U",1,0)
+appendedDf$famsize<-ifelse(appendedDf$famsize=="GT3",1,0)
+appendedDf$school<-ifelse(appendedDf$school=="GP",1,0)
+appendedDf$famsup<-ifelse(appendedDf$famsup=="yes",1,0)
+appendedDf$paid<-ifelse(appendedDf$paid=="yes",1,0)
+appendedDf$activities<-ifelse(appendedDf$activities=="yes",1,0)
+appendedDf$nursery<-ifelse(appendedDf$nursery=="yes",1,0)
+appendedDf$higher<-ifelse(appendedDf$higher=="yes",1,0)
+appendedDf$internet<-ifelse(appendedDf$internet=="yes",1,0)
+appendedDf$romantic<-ifelse(appendedDf$romantic=="yes",1,0)
+appendedDf$Pstatus<-ifelse(appendedDf$Pstatus=="T",1,0)
+appendedDf$typeC<-ifelse(appendedDf$typeC=="math",1,0)
+str(appendedDf)         
+allnums <- (appendedDf[,c(1,2,3,4,5,6,7,8,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34)])
+head(allnums)
+```
+```{r}
+
+#normalize numeric attributes
+min_max_norm <- function(x){
+  (x - min(x)) / (max(x) - min(x))
+}
+
+datanorm <- allnums %>%
+  mutate(across(c(3,7,8,9,10,11,20,21,22,23,24,25,26,27,28),min_max_norm))
+
+
+
+
+
+#Dimensionality reduction
+#PCA
+dataMatrix <- data.matrix(datanorm[,c(1:28,30)])
+data_PCA <- princomp(dataMatrix )
+summary(data_PCA, loading = T)
+score <- data_PCA$scores
+head(score)
+
+# Plot the dimensions
+fviz_screeplot(data_PCA, main=" ",ncp=50, addlabels = TRUE) 
+
+# Plot the Principal Components:
+fviz_pca_biplot(data_PCA,col.var="contrib", invisible = "ind", habillage ="none", geom = "text", labelsize=4) + theme_minimal()
+
+# show the contributions of the variables for PC1
+fviz_contrib(data_PCA, choice = "var", axes = 1, top = 10)
+# show the contributions of the variables for PC2
+fviz_contrib(data_PCA, choice = "var", axes = 2, top = 10)
+```
+```{r}
+
+#Random Forest dimension reduction
+
+dataR<-(datanorm[,c(1:30)])
+
+
+#add the target column called FinalGradeR
+#grades less than 10 are a failure and assigned a zero and #grades more than or equal to 10 will be considered pass and #assigned 1
+
+dataR <- dataR %>%
+  mutate(FinalGradeR = case_when(
+    G3 < 10 ~ 0, 
+    G3 > 9 ~ 1
+  ))
+
+head(dataR)
+dataR<-(dataR[,c(1:28, 30, 31)])
+
+
+head(dataR)
+
+for (i in colnames(dataR)){
+   dataR[[i]] = factor(dataR[[i]])
+}
+
+
+set.seed(2022)
+
+
+# definethe control using a RF selection function
+control <- rfeControl(functions=rfFuncs, method="cv", number=10)
+# run the algorithm
+results <- rfe(dataR[,1:29], dataR[,30], sizes=c(1:29), rfeControl=control)
+# Look at the results
+print(results)
+# list the chosen predictors
+predictors(results)
+
+# plot the results
+plot(results, type=c("g", "o"))
+```
+```{r}
+#normalize numeric attributes
+min_max_norm <- function(x){
+  (x - min(x)) / (max(x) - min(x))
+}
+dataN<-(appendedDf[,c(1,2,3,4,5,6,7,8,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34)])
+head(dataN)
+datanorm <- dataN %>%
+  mutate(across(c(3,7,8,9,10,11,20,21,22,23,24,25,26,27,28),min_max_norm))
+
+head(datanorm)
+
+#create different sub groups of variables for the ml models
+
+#add the target column
+datagroupB <- datanorm %>%
+  mutate(FinalGradeR = case_when(
+    G3 < 10 ~ 0, 
+    G3 > 9 ~ 1
+  ))
+
+datagroupA <- (datanorm)
+
+datagroupA <- datagroupA %>%
+  mutate(FinalGradeR = case_when(
+    G3 < 10 ~ 0, 
+    G3 > 9 ~ 1
+  ))
+datagroupA <- datagroupA[,c(1:28,30,31)]
+
+
+datagroupB<-(datanorm[,c(11,27,28,29,30)])
+
+#add the target column
+datagroupB <- datagroupB %>%
+  mutate(FinalGradeR = case_when(
+    G3 < 10 ~ 0, 
+    G3 > 9 ~ 1
+  ))
+datagroupB <- datagroupB[,c(1:3,5,6)]
+
+
+datagroupC <- (datanorm[,c(30,1,14,4,18,13,7,15,8,9,29)])
+datagroupC <- datagroupC %>%
+  mutate(FinalGradeR = case_when(
+    G3 < 10 ~ 0, 
+    G3 > 9 ~ 1
+  ))
+datagroupC <- datagroupC[,c(1:10,12)]
+
+
+datagroupLR <- dataN %>%
+  mutate(across(c(3,26,27,28,29),min_max_norm))
+datagroupLR <- (datagroupLR[,c(3,26,27,28,29)])
+```
+
+```{r}
+#linear regression model
+lm<-lm(G3 ~ age + absences + G1 + G2, data = datagroupLR)
+summary(lm)
+avPlots(lm)
+
+```
+
+
+
+
+```{r}
+
+#split data into train and test sets
+train_index <- sample(1:nrow(datagroupA), 0.7 * nrow(datagroupA))
+train.setA <- datagroupA[train_index,]
+test.setA <- datagroupA[-train_index,]
+
+train_index <- sample(1:nrow(datagroupB), 0.7 * nrow(datagroupB))
+train.setB <- datagroupB[train_index,]
+test.setB <- datagroupB[-train_index,]
+
+train_index <- sample(1:nrow(datagroupC), 0.7 * nrow(datagroupC))
+train.setC <- datagroupC[train_index,]
+test.setC <- datagroupC[-train_index,]
+```
+
+
+
+
+
+```{r}
+
+#build logistic regression models
+glm_modelA <- glm(FinalGradeR ~ ., family = "binomial" (link=logit), data = train.setA)
+summary(glm_modelA)
+
+glm_modelB <- glm(FinalGradeR ~ ., family = "binomial" (link=logit), data = train.setB)
+summary(glm_modelB)
+
+glm_modelC <- glm(FinalGradeR ~ ., family = "binomial"(link=logit), data = train.setC)
+summary(glm_modelC)
+
+test.setA$pred <- predict(glm_modelA, newdata = test.setA, type = 'response') 
+
+ProbabilityCutoff <- 0.5  
+test.setA$pred.probs <- 1-test.setA$pred
+
+test.setA$pred.passed <- ifelse(test.setA$pred > ProbabilityCutoff, 1, 0)
+
+confusionMatrix(as.factor(test.setA$FinalGradeR), as.factor(test.setA$pred.passed))
+
+
+test.setB$pred <- predict(glm_modelB, newdata = test.setB, type = 'response') 
+
+test.setB$pred.probs <- 1-test.setB$pred
+
+test.setB$pred.passed <- ifelse(test.setB$pred > ProbabilityCutoff, 1, 0)
+
+confusionMatrix(as.factor(test.setB$FinalGradeR), as.factor(test.setB$pred.passed))
+
+
+test.setC$pred <- predict(glm_modelC, newdata = test.setC, type = 'response') 
+test.setC$pred.probs <- 1-test.setC$pred
+
+test.setC$pred.passed <- ifelse(test.setC$pred > ProbabilityCutoff, 1, 0)
+
+confusionMatrix(as.factor(test.setC$FinalGradeR), as.factor(test.setC$pred.passed))
+
+
+```
+
+```{r}
+
+
+#build decision tree models
+treeA <- rpart(FinalGradeR ~ ., data=train.setA, method="class", control = rpart.control(minsplit = 30, minbucket = 10, cp = 0.001))
+
+summary(treeA)
+fancyRpartPlot(treeA,caption = "Classification Tree")
+predictA <-predict(treeA, test.setA, type = 'class')
+
+table_A<- table(test.setA$FinalGradeR, predictA)
+table_A
+accuracy_Test <- sum(diag(table_A)) / sum(table_A)
+print(paste('Accuracy for tree A', accuracy_Test))
+
+treeB <- rpart(FinalGradeR ~ ., data =train.setB, method = 'class', control = rpart.control(minsplit = 30, minbucket = 10, cp = 0.001))
+summary(treeB)
+fancyRpartPlot(treeB, caption = "Classification Tree")
+predictB <-predict(treeB, test.setB, type = 'class')
+
+table_B<- table(test.setB$FinalGradeR, predictB)
+table_B
+accuracy_Test <- sum(diag(table_B)) / sum(table_B)
+print(paste('Accuracy for tree B', accuracy_Test))
+
+treeC <- rpart(FinalGradeR ~ ., data =train.setC, method = 'class', control = rpart.control(minsplit = 10, minbucket = 10, cp = 0.001))
+               
+summary(treeC)
+fancyRpartPlot(treeC, caption = "Classification Tree")
+predictC <-predict(treeC, test.setC, type = 'class')
+
+table_C<- table(test.setC$FinalGradeR, predictC)
+table_C
+accuracy_Test <- sum(diag(table_C)) / sum(table_C)
+print(paste('Accuracy for tree C', accuracy_Test))
+
+
+
+```
+
+```{r}
+
+# buid kNN model
+
+target_category <- train.setA[,30]
+test_category <- test.setA[,30]
+test.setA <- test.setA[,1:30]
+
+
+knnmodel <- knn(train.setA, test.setA, cl=target_category, k = 10)
+tab <- table(knnmodel,test_category)
+accuracy <- function(x){sum(diag(x)/(sum(rowSums(x)))) * 100}
+accuracy(tab)
+confusionMatrix(table(knnmodel ,test_category))
+
+target_category <- train.setB[,5]
+test_category <- test.setB[,5]
+test.setB <- test.setB[,1:5]
+
+knnmodelB <- knn(train.setB, test.setB, cl=target_category, k = 10)
+tab <- table(knnmodelB,test_category)
+accuracy <- function(x){sum(diag(x)/(sum(rowSums(x)))) * 100}
+accuracy(tab)
+confusionMatrix(table(knnmodelB ,test_category))
+
+target_category <- train.setC[,11]
+test_category <- test.setC[,11]
+test.setC <- test.setC[,1:11]
+
+knnmodelC <- knn(train.setC, test.setC, cl=target_category, k = 10)
+tab <- table(knnmodelC,test_category)
+accuracy <- function(x){sum(diag(x)/(sum(rowSums(x)))) * 100}
+accuracy(tab)
+
+confusionMatrix(table(knnmodelC ,test_category))
+```
+
